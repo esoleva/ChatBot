@@ -31,7 +31,7 @@ if user_input := st.chat_input("Ask me anything..."):
     # Generate response from the LLM
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = llm(f"User: {user_input}\nAssistant:", max_tokens=200, stop=["User:", "\n"])[
+            response = llm(f"User: {user_input}\nAssistant:", max_tokens=20000, stop=["User:", "\n"])[
                 "choices"][0]["text"].strip()
             st.markdown(response)
 
