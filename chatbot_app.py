@@ -17,7 +17,7 @@ if "messages" not in st.session_state:
 # Display previous messages
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):  
-        st.markdown(msg["content"])
+        st.markdown(msg["content"], unsafe_allow_html=True)
 
 # User input
 if user_input := st.chat_input("Ask me anything..."):
@@ -33,7 +33,14 @@ if user_input := st.chat_input("Ask me anything..."):
         with st.spinner("Thinking..."):
             response = llm(f"User: {user_input}\nAssistant:", max_tokens=20000, stop=["User:", "\n"])[
                 "choices"][0]["text"].strip()
-            st.markdown(response)
+            
+            # Ensure proper markdown rendering for lists
+            if "-" in response or "*" in response:
+                formatted_response = f"\n{response}\n"
+            else:
+                formatted_response = response
+            
+            st.markdown(formatted_response, unsafe_allow_html=True)
 
     # Save assistant's response in session state
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    st.session_state.messages.append({"role": "assistant", "content": formatted_response})
