@@ -19,30 +19,20 @@ def clean_text(text):
 # Function to load or create the local documents
 def load_or_create_documents():
     if not os.path.exists(DATA_PATH):
-        print(f"Error: File not found at {DATA_PATH}")
         return []
 
-    # Try reading the file
     try:
         with open(DATA_PATH, "r", encoding="utf-8") as file:
             text = file.read().strip()
-            print(f"File content (first 500 characters): {text[:500]}...")  # Debugging
-    except Exception as e:
-        print(f"Error reading file: {e}")
+    except Exception:
         return []
 
     if not text:
-        print("No content found in the file.")
         return []
 
-    # Clean and split the text
     text = clean_text(text)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = text_splitter.split_text(text)
-
-    print(f"Created {len(chunks)} chunks.")
-    if chunks:
-        print(f"Preview of first chunk: {chunks[0][:200]}...")
 
     return [Document(page_content=chunk) for chunk in chunks]
 
@@ -51,18 +41,16 @@ documents = load_or_create_documents()
 
 # Function to retrieve relevant information
 def retrieve_info(query):
-    print(f"User query: {query}")  # Debugging
-    relevant_docs = []
+    relevant_docs = [
+        doc.page_content for doc in documents if query.lower() in doc.page_content.lower()
+    ]
+    
+    if relevant_docs:
+        # Format as bullet points with proper line breaks
+        return "\n".join([f"• {doc}\n" for doc in relevant_docs])
+    else:
+        return None
 
-    for doc in documents:
-        print(f"Checking chunk (first 100 chars): {doc.page_content[:100]}...")
-        if query.lower() in doc.page_content.lower():
-            relevant_docs.append(doc.page_content)
-
-    if not relevant_docs:
-        print("No relevant documents found.")
-
-    return "\n".join(relevant_docs) if relevant_docs else None
 
 # Streamlit UI
 st.title("Chat with Elena's bot (RAG-enabled)")
