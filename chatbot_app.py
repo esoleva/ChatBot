@@ -1,41 +1,71 @@
 import streamlit as st
-from llama_cpp import Llama
 import os
+from sentence_transformers import SentenceTransformer
+from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Path to your Meta-Llama model
-MODEL_PATH = "/Users/elenas/.lmstudio/models/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+# Paths
+MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"  # HuggingFace sentence transformer
+DATA_PATH = "/Users/elenas/AWScourses/presentations.txt"
 
-# Path to your local folder with text files
-FOLDER_PATH = "/Users/elenas/AWS courses"
+# Load the Sentence Transformer model
+model = SentenceTransformer(MODEL_PATH)
 
-# Load the model
-llm = Llama(model_path=MODEL_PATH, n_ctx=2096, n_threads=8)
+# Function to clean and preprocess the text
+def clean_text(text):
+    text = text.lower().replace("\n", " ").replace("\r", "")
+    return " ".join(text.split())
 
-# Function to load and preprocess text from files in the folder
-def load_and_preprocess_text(folder_path, max_files=3, max_lines=100):
-    if not os.path.exists(folder_path):  # Ensure folder exists
-        return {}
+# Function to load or create the local documents
+def load_or_create_documents():
+    if not os.path.exists(DATA_PATH):
+        print(f"Error: File not found at {DATA_PATH}")
+        return []
 
-    processed_text = {}
-    file_count = 0
-    
-    # Process up to 'max_files' text files
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".txt") and file_count < max_files:
-            file_path = os.path.join(folder_path, filename)
-            with open(file_path, "r", encoding="utf-8") as file:
-                lines = file.readlines()[:max_lines]  # Only take the first N lines for faster load
-                processed_text[filename] = "".join(lines)
-                file_count += 1
-    
-    return processed_text
+    # Try reading the file
+    try:
+        with open(DATA_PATH, "r", encoding="utf-8") as file:
+            text = file.read().strip()
+            print(f"File content (first 500 characters): {text[:500]}...")  # Debugging
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return []
 
-# Preprocess knowledge base once (stored in session state)
-if "knowledge_base" not in st.session_state:
-    st.session_state.knowledge_base = load_and_preprocess_text(FOLDER_PATH)
+    if not text:
+        print("No content found in the file.")
+        return []
 
-# Streamlit app
-st.title("Chat with Elena's bot")
+    # Clean and split the text
+    text = clean_text(text)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    chunks = text_splitter.split_text(text)
+
+    print(f"Created {len(chunks)} chunks.")
+    if chunks:
+        print(f"Preview of first chunk: {chunks[0][:200]}...")
+
+    return [Document(page_content=chunk) for chunk in chunks]
+
+# Load the documents
+documents = load_or_create_documents()
+
+# Function to retrieve relevant information
+def retrieve_info(query):
+    print(f"User query: {query}")  # Debugging
+    relevant_docs = []
+
+    for doc in documents:
+        print(f"Checking chunk (first 100 chars): {doc.page_content[:100]}...")
+        if query.lower() in doc.page_content.lower():
+            relevant_docs.append(doc.page_content)
+
+    if not relevant_docs:
+        print("No relevant documents found.")
+
+    return "\n".join(relevant_docs) if relevant_docs else None
+
+# Streamlit UI
+st.title("Chat with Elena's bot (RAG-enabled)")
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -53,27 +83,15 @@ if user_input := st.chat_input("Ask me anything..."):
 
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Search in the preprocessed knowledge base (simple keyword search)
-    found_answer = None
-    for filename, content in st.session_state.knowledge_base.items():
-        if user_input.lower() in content.lower():  # Check if user input matches any part of the file content
-            found_answer = content[:500]  # Show a portion of the found content
-            source = f"from the file: {filename}"
-            break
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            retrieved_info = retrieve_info(user_input)
 
-    if found_answer:
-        # If content is found in the local knowledge base, return it
-        response = f"Answer from {source}:\n{found_answer}"
-    else:
-        # If no match, use the model for a response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response = llm(f"User: {user_input}\nAssistant:", max_tokens=150)["choices"][0]["text"].strip()
-                source = "general model knowledge"
-    
-    # Display the response with source information
-    st.markdown(f"**Source**: {source}")
-    st.markdown(response)
+            if retrieved_info:
+                response = f"📁 **Source: Local file**\n\n{retrieved_info}"
+            else:
+                response = f"🤖 **Source: AI model**\n\nSorry, I couldn't find an answer from the local file."
 
-    # Save assistant's response in session state
+            st.markdown(response)
+
     st.session_state.messages.append({"role": "assistant", "content": response})
