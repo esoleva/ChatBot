@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import concurrent.futures
 from sentence_transformers import SentenceTransformer
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -53,15 +54,21 @@ def retrieve_info(query):
     else:
         return None
 
-# Function to get an AI-generated response as fallback using Llama
-def get_llama_response(query):
-    response = llm(
-        f"User: {query}\nAssistant:",
-        max_tokens=512,  # Lower max tokens for faster responses
-        stop=["User:", "\n\nUser:"],  # Stop sequences to prevent excessive generation
-    )["choices"][0]["text"].strip()
+# Function to get an AI-generated response as fallback using Llama with timeout
+def get_llama_response(query, timeout=20):
+    def llama_call():
+        return llm(
+            f"User: {query}\nAssistant:",
+            max_tokens=512,  # Lower max tokens for faster responses
+            stop=["User:", "\n\nUser:"],  # Stop sequences to prevent excessive generation
+        )["choices"][0]["text"].strip()
 
-    return response
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(llama_call)
+        try:
+            return future.result(timeout=timeout)  # Set timeout
+        except concurrent.futures.TimeoutError:
+            return "Llama model timed out. Please try again."
 
 # Streamlit UI
 st.title("Chat with Elena's bot")
