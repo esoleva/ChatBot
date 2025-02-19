@@ -3,13 +3,16 @@ import os
 from sentence_transformers import SentenceTransformer
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from llama_cpp import Llama
 
 # Paths
-MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"  # HuggingFace sentence transformer
+EMBEDDING_MODEL_PATH = "sentence-transformers/all-MiniLM-L6-v2"  # HuggingFace embedding model
 DATA_PATH = "/Users/elenas/AWScourses/presentations.txt"
+LLAMA_MODEL_PATH = "/Users/elenas/.lmstudio/models/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
 
-# Load the Sentence Transformer model
-model = SentenceTransformer(MODEL_PATH)
+# Load models
+embedding_model = SentenceTransformer(EMBEDDING_MODEL_PATH)
+llm = Llama(model_path=LLAMA_MODEL_PATH, n_ctx=4096, n_threads=8)  # Adjust as needed
 
 # Function to clean and preprocess the text
 def clean_text(text):
@@ -46,14 +49,22 @@ def retrieve_info(query):
     ]
     
     if relevant_docs:
-        # Format as bullet points with proper line breaks
         return "\n".join([f"• {doc}\n" for doc in relevant_docs])
     else:
         return None
 
+# Function to get an AI-generated response as fallback using Llama
+def get_llama_response(query):
+    response = llm(
+        f"User: {query}\nAssistant:",
+        max_tokens=512,  # Lower max tokens for faster responses
+        stop=["User:", "\n\nUser:"],  # Stop sequences to prevent excessive generation
+    )["choices"][0]["text"].strip()
+
+    return response
 
 # Streamlit UI
-st.title("Chat with Elena's bot (RAG-enabled)")
+st.title("Chat with Elena's bot")
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -78,7 +89,8 @@ if user_input := st.chat_input("Ask me anything..."):
             if retrieved_info:
                 response = f"📁 **Source: Local file**\n\n{retrieved_info}"
             else:
-                response = f"🤖 **Source: AI model**\n\nSorry, I couldn't find an answer from the local file."
+                llama_response = get_llama_response(user_input)
+                response = f"🤖 **Source: Llama Model**\n\n{llama_response}"
 
             st.markdown(response)
 
